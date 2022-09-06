@@ -1,10 +1,20 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class Detail extends StatelessWidget {
-  Detail(this.data,{Key? key}) : super(key: key);
+  Detail(this.data,{Key? key}) : super(key: key){
+    //Step 1.2:Get the reference of the document
+    _documentReference=FirebaseFirestore.instance.collection('posts').doc(data['id']);
+    //Step 2.2:Get the reference of the comments collection
+    _referenceComments=_documentReference.collection('comments');
+    //Step 5.2:Get the stream
+    _streamComments=_referenceComments.snapshots();
+  }
+
   Map data;
-
-
+  late DocumentReference _documentReference;   //Step 1.1: Create field for the document reference
+  late CollectionReference _referenceComments; //Step 2.1: Create field for the comments collection
+  late Stream<QuerySnapshot> _streamComments;  //Step 5.1: Create fiels for the comments stream
   @override
   Widget build(BuildContext context) {
     return Scaffold(appBar: AppBar(
@@ -13,14 +23,29 @@ class Detail extends StatelessWidget {
     floatingActionButton: FloatingActionButton(onPressed: () {
 
       showModalBottomSheet(
+        isScrollControlled: true,
         context: context, builder: (BuildContext context) {
-        return Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
+          TextEditingController controller=TextEditingController();
+          return Padding(
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child:Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(),
-              ElevatedButton(onPressed: (){}, child: Text('Submit'))
+              TextFormField(controller: controller,),
+              ElevatedButton(onPressed: (){
+
+                Map<String,String> commentToAdd={
+                  'comment_text':controller.text
+                };
+
+                //Step 3.1: Add the comment to the sub-collection comments
+                _referenceComments.add(commentToAdd);
+
+                //Step 3.2: Dismiss the bottom sheet
+                Navigator.of(context).pop();
+
+              }, child: Text('Submit'))
             ],
           ),
         );
@@ -37,14 +62,42 @@ class Detail extends StatelessWidget {
             padding: EdgeInsets.all(18),
             child: Text(data['title'])),
         Expanded(
-          child: ListView.builder(
-              itemCount: 40,
-              itemBuilder: (contexr,index){
-            return ListTile(title: Text('Hello world'),);
-          }),
+          child: buildCommentsListView(),
         ),
       ],
     )
     );
+  }
+
+  StreamBuilder buildCommentsListView() {
+
+    //Step 6: Add a StreamBuilder
+    return StreamBuilder<QuerySnapshot>(
+      stream: _streamComments,
+        builder: (BuildContext context,AsyncSnapshot snapshot){
+      if(snapshot.hasError){
+        return Text('Some error occurred: ${snapshot.error}');
+      }
+
+      if(snapshot.hasData){
+        //Step 7: Get the data
+        QuerySnapshot data=snapshot.data;
+        List<QueryDocumentSnapshot> documents=data.docs;
+        List<Map> comments=documents.map((e) => {
+          'comment_id':e.id,
+          'comment_text':e['comment_text']}).toList();
+
+        //Step 8: Display the comment on a ListView
+        return ListView.builder(
+            itemCount: comments.length,
+            itemBuilder: (context,index){
+              Map thisComment=comments[index];
+              return ListTile(
+                title: Text(thisComment['comment_text']),);
+            });
+      }
+
+      return CircularProgressIndicator();
+    });
   }
 }
